@@ -11,7 +11,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_CRITICAL_HOURS, CONF_HEAD, CONF_NOTIFY, CONF_RESOLVED_MINUTES, CONF_SNOOZE_HOURS, CONF_WARNING_HOURS,
+    CONF_CRITICAL_HOURS, CONF_DISMISS_HOURS, CONF_HEAD, CONF_NOTIFY, CONF_RESOLVED_MINUTES, CONF_WARNING_HOURS,
     DEFAULTS, DOMAIN,
 )
 
@@ -39,13 +39,13 @@ class SbNotifyOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
             return self.async_create_entry(data=user_input)
-        o = {**DEFAULTS, **self.config_entry.options}
+        o = {**DEFAULTS, **{k: v for k, v in self.config_entry.options.items() if k in DEFAULTS}}
         schema = vol.Schema({
             vol.Required(CONF_NOTIFY, default=o[CONF_NOTIFY]): selector.TextSelector(),
             vol.Required(CONF_CRITICAL_HOURS, default=o[CONF_CRITICAL_HOURS]): _num(0.25, 48, 0.25, "h"),
             vol.Required(CONF_WARNING_HOURS, default=o[CONF_WARNING_HOURS]): _num(1, 168, 1, "h"),
             vol.Required(CONF_RESOLVED_MINUTES, default=o[CONF_RESOLVED_MINUTES]): _num(1, 240, 1, "min"),
-            vol.Required(CONF_SNOOZE_HOURS, default=o[CONF_SNOOZE_HOURS]): _num(0.25, 48, 0.25, "h"),
+            vol.Required(CONF_DISMISS_HOURS, default=o[CONF_DISMISS_HOURS]): _num(0, 168, 1, "h"),
             vol.Required(CONF_HEAD, default=o[CONF_HEAD]): selector.BooleanSelector(),
         })
         return self.async_show_form(step_id="init", data_schema=schema)

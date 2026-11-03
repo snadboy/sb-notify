@@ -14,27 +14,21 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from .const import (
-    ACTION_ACK, ACTION_SNOOZE, CH_CRITICAL, CH_HEAD, CH_NOTICE, CH_NOTICE_LOUD, CH_RESOLVED, CH_WARNING,
-    GROUP_ALERTS, GROUP_NOTICES, ST_ACKED, TAG_HEAD,
+    ACTION_DISMISS, CH_CRITICAL, CH_HEAD, CH_NOTICE, CH_NOTICE_LOUD, CH_RESOLVED, CH_WARNING,
+    GROUP_ALERTS, GROUP_NOTICES, ST_OPEN, TAG_HEAD,
 )
 from .register import alert_tag, notice_tag
 
 CLEAR = "clear_notification"
 
 
-def alert(a: dict, *, loud: bool, since: Callable[[float], str], snooze_hours: float) -> dict:
+def alert(a: dict, *, loud: bool, since: Callable[[float], str]) -> dict:
     critical = a["severity"] == "critical"
-    acked = a["state"] == ST_ACKED
     bits = [f"since {since(a['first_seen'])}"]
     if a["count"] > 1:
         bits.append(f"{a['count']:,} times")
-    if acked:
-        bits.append("acknowledged")
     message = "\n".join(p for p in (a["message"], " · ".join(bits)) if p)
-    actions = []
-    if not acked:
-        actions.append({"action": ACTION_ACK + a["key"], "title": "Ack"})
-    actions.append({"action": ACTION_SNOOZE + a["key"], "title": f"Snooze {snooze_hours:g} h"})
+    actions = [{"action": ACTION_DISMISS + a["key"], "title": "Dismiss"}]
     if a.get("url"):
         actions.append({"action": "URI", "title": "Open", "uri": a["url"]})
     data = {
@@ -84,8 +78,10 @@ def notice(n: dict, *, now: float) -> dict:
 
 
 def head(open_alerts: list[dict]) -> dict | None:
-    """The status card at the top of the Alerts group, or None when nothing is open."""
-    pushed = [a for a in open_alerts if a["severity"] != "info"]
+    """The status card at the top of the Alerts group, or None when nothing is on the phone.
+
+    Counts only alerts whose cards are on the phone: open, not info, not dismissed."""
+    pushed = [a for a in open_alerts if a["severity"] != "info" and a["state"] == ST_OPEN]
     if not pushed:
         return None
     crit = sum(1 for a in pushed if a["severity"] == "critical")

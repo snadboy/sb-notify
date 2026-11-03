@@ -17,7 +17,7 @@ V = importlib.import_module("sbn.render")
 C = importlib.import_module("sbn.const")
 
 H = 3600
-SETTINGS = {"critical": 4 * H, "warning": 24 * H, "resolved": 15 * 60, "snooze": 4 * H}
+SETTINGS = {"critical": 4 * H, "warning": 24 * H, "resolved": 15 * 60, "dismiss": 24 * H}
 since = lambda t: f"t{int(t)}"  # noqa: E731
 
 
@@ -45,13 +45,13 @@ def test_reraise_same_severity_is_silent_and_counts():
     assert a["count"] == 2 and a["message"] == "new text" and a["notify_count"] == 1
 
 
-def test_reraise_higher_severity_unacks_and_notifies_loud():
+def test_reraise_higher_severity_undismisses_and_notifies_loud():
     r = R.Register(SETTINGS)
     r.raise_("k", "t", 0, severity="warning")
-    r.ack("k", 10)
+    r.dismiss("k", 10)
     fx = r.raise_("k", "t", 20, severity="critical")
     assert shows(fx) == [("k", True)]
-    assert r.alerts["k"]["state"] == "open"
+    assert r.alerts["k"]["state"] == "open" and r.alerts["k"]["returns_at"] is None
 
 
 def test_info_never_pushes():
@@ -61,13 +61,13 @@ def test_info_never_pushes():
     assert ops(r.resolve("k", 1), "show_resolved") == []
 
 
-def test_critical_renotifies_every_4h_until_acked():
+def test_critical_renotifies_every_4h_until_dismissed():
     r = R.Register(SETTINGS)
     r.raise_("k", "t", 0, severity="critical")
     assert shows(r.tick(4 * H - 1)) == []
     assert shows(r.tick(4 * H)) == [("k", True)]
     assert shows(r.tick(8 * H)) == [("k", True)]
-    r.ack("k", 8 * H + 1)
+    r.dismiss("k", 8 * H + 1)
     assert shows(r.tick(20 * H)) == []
 
 
@@ -78,14 +78,53 @@ def test_warning_renotifies_once():
     assert shows(r.tick(48 * H)) == []
 
 
-def test_snooze_clears_then_comes_back():
+def test_dismiss_clears_then_returns_once_after_24h():
     r = R.Register(SETTINGS)
-    r.raise_("k", "t", 0, severity="critical")
-    fx = r.ack("k", 100, snooze=4 * H)
-    assert ops(fx, "clear") == [{"op": "clear", "tag": "sbn-a:k"}]
-    assert shows(r.raise_("k", "t", 200)) == []        # still snoozed: stays off the phone
-    assert shows(r.tick(100 + 4 * H)) == [("k", True)]
+    r.raise_("k", "t", 0, severity="warning")
+    fx = r.dismiss("k", 100)
+    assert ops(fx, "clear") == [{"op": "clear", "tag": "sbn-a:k"}] and ops(fx, "event")[0]["state"] == "dismissed"
+    assert shows(r.raise_("k", "t", 200)) == []        # dismissed: re-raise stays off the phone
+    assert r.dismiss("k", 300) == []                   # already dismissed
+    assert shows(r.tick(100 + 24 * H - 1)) == []
+    assert shows(r.tick(100 + 24 * H)) == [("k", True)]
     assert r.alerts["k"]["state"] == "open"
+    assert shows(r.tick(100 + 72 * H)) == []           # warning: back once, no more reminders
+
+
+def test_dismiss_never_returns_when_setting_is_zero():
+    r = R.Register({**SETTINGS, "dismiss": 0})
+    r.raise_("k", "t", 0, severity="critical")
+    r.dismiss("k", 1)
+    assert r.alerts["k"]["returns_at"] is None and shows(r.tick(30 * 24 * H)) == []
+
+
+def test_resolve_while_dismissed_has_no_phone_card():
+    r = R.Register(SETTINGS)
+    r.raise_("k", "t", 0)
+    r.dismiss("k", 1)
+    assert ops(r.resolve("k", 2), "show_resolved") == []
+    assert ops(r.tick(2 + 15 * 60), "clear") == []     # nothing on the phone to clear
+    assert r.history[0]["key"] == "k"
+
+
+def test_history_keeps_newest_30():
+    r = R.Register(SETTINGS)
+    for i in range(35):
+        r.raise_(f"k{i}", f"t{i}", i)
+        r.resolve(f"k{i}", i)
+    r.tick(10 * H)
+    assert len(r.history) == 30 and r.history[0]["key"] == "k34" and r.alerts == {}
+
+
+def test_migrates_0_1_0_state():
+    old = {"alerts": {"k": {"key": "k", "title": "t", "message": "", "severity": "warning", "url": None,
+                            "source": None, "ttl": None, "state": "acked", "first_seen": 0, "last_seen": 0,
+                            "count": 1, "notified_at": 0, "notify_count": 1, "snoozed_until": 50,
+                            "resolved_at": None, "resolve_message": None}}, "notices": {}}
+    r = R.Register(SETTINGS, old)
+    a = r.alerts["k"]
+    assert a["state"] == "dismissed" and a["returns_at"] == 50 and "snoozed_until" not in a
+    assert shows(r.tick(50)) == [("k", True)] and r.history == []
 
 
 def test_resolve_shows_resolved_then_clears_and_forgets():
@@ -116,9 +155,9 @@ def test_ttl_resolves_stale_alert():
     assert ops(fx, "event")[0]["state"] == "resolved"
 
 
-def test_resolve_and_ack_unknown_keys_are_noops():
+def test_resolve_and_dismiss_unknown_keys_are_noops():
     r = R.Register(SETTINGS)
-    assert r.resolve("nope", 0) == [] and r.ack("nope", 0) == []
+    assert r.resolve("nope", 0) == [] and r.dismiss("nope", 0) == []
 
 
 def test_open_alerts_worst_then_oldest():
@@ -158,22 +197,19 @@ def test_render_alert_buttons_and_channels():
     r = R.Register(SETTINGS)
     r.raise_("k", "PKDB down", 0, severity="critical", url="https://x/", message="m")
     r.raise_("k", "PKDB down", 9, severity="critical", message="m")
-    p = V.alert(r.alerts["k"], loud=True, since=since, snooze_hours=4)
+    p = V.alert(r.alerts["k"], loud=True, since=since)
     d = p["data"]
     assert d["tag"] == "sbn-a:k" and d["group"] == C.GROUP_ALERTS and d["channel"] == C.CH_CRITICAL
     assert d["alert_once"] is False and d["importance"] == "high"
-    assert [x["title"] for x in d["actions"]] == ["Ack", "Snooze 4 h", "Open"]   # url kept on re-raise
+    assert d["actions"] == [{"action": "SBN_DISMISS:k", "title": "Dismiss"},
+                            {"action": "URI", "title": "Open", "uri": "https://x/"}]   # url kept on re-raise
     assert p["message"] == "m\nsince t0 · 2 times"
-    r.ack("k", 10)
-    p = V.alert(r.alerts["k"], loud=False, since=since, snooze_hours=4)
-    assert [x["title"] for x in p["data"]["actions"]] == ["Snooze 4 h", "Open"]
-    assert "acknowledged" in p["message"] and p["data"]["alert_once"] is True
 
 
 def test_render_warning_is_quiet_channel():
     r = R.Register(SETTINGS)
     r.raise_("k", "t", 0, url="https://x/")
-    d = V.alert(r.alerts["k"], loud=True, since=since, snooze_hours=4)["data"]
+    d = V.alert(r.alerts["k"], loud=True, since=since)["data"]
     assert d["channel"] == C.CH_WARNING and d["importance"] == "low" and d["clickAction"] == "https://x/"
     assert d["actions"][-1] == {"action": "URI", "title": "Open", "uri": "https://x/"}
 
@@ -210,6 +246,9 @@ def test_render_head():
     h = V.head(r.open_alerts())
     assert h["title"] == "Alerts: 5 open · 1 critical"
     assert h["message"].splitlines() == ["crit", "warn 0", "warn 1", "and 2 more"]
+    for i in range(4):
+        r.dismiss(f"w{i}", 20)
+    assert V.head(r.open_alerts())["title"] == "Alerts: 1 open · 1 critical"
 
 
 if __name__ == "__main__":

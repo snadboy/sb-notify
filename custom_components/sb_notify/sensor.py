@@ -12,7 +12,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import SIGNAL_UPDATE
+from .const import SIGNAL_UPDATE, ST_RESOLVED
 
 
 def _iso(t: float | None) -> str | None:
@@ -43,6 +43,8 @@ class AlertsSensor(_Base):
     _kind = "alerts"
     _attr_name = "SB Notify alerts"
     _attr_icon = "mdi:alert-circle-outline"
+    # The lists are for the sidebar page and dashboards, not for history: keep them out of the recorder.
+    _unrecorded_attributes = frozenset({"alerts", "recent"})
 
     @property
     def native_value(self) -> int:
@@ -57,15 +59,27 @@ class AlertsSensor(_Base):
                 "key": a["key"], "title": a["title"], "message": a["message"], "severity": a["severity"],
                 "state": a["state"], "source": a["source"], "url": a["url"], "count": a["count"],
                 "first_seen": _iso(a["first_seen"]), "last_seen": _iso(a["last_seen"]),
-                "snoozed_until": _iso(a["snoozed_until"]),
+                "returns_at": _iso(a["returns_at"]),
             } for a in alerts],
+            "recent": [{
+                "key": h["key"], "title": h["title"], "severity": h["severity"], "source": h["source"],
+                "count": h["count"], "first_seen": _iso(h["first_seen"]), "resolved_at": _iso(h["resolved_at"]),
+                "resolve_message": h["resolve_message"],
+            } for h in self._recent()],
         }
+
+    def _recent(self) -> list[dict]:
+        """Resolved alerts, newest first: those still lingering on the phone, then the history."""
+        r = self.notifier.register
+        lingering = sorted((a for a in r.alerts.values() if a["state"] == ST_RESOLVED), key=lambda a: -a["resolved_at"])
+        return [*lingering, *r.history]
 
 
 class NoticesSensor(_Base):
     _kind = "notifications"
     _attr_name = "SB Notify notifications"
     _attr_icon = "mdi:bell-outline"
+    _unrecorded_attributes = frozenset({"notifications"})
 
     @property
     def native_value(self) -> int:

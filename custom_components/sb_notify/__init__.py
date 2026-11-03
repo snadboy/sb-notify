@@ -1,9 +1,10 @@
 """SB Notify — one door for phone notifications, in two Android groups.
 
-Alerts (something is broken): `sb_notify.raise` / `.resolve` / `.ack` keep a register of
-open problems keyed by a stable `key`. A new problem notifies; raising it again only
-refreshes its card; critical re-notifies until acknowledged; a resolved card clears
-itself. Ack / Snooze buttons on the phone call `ack`.
+Alerts (something is broken): `sb_notify.raise` / `.resolve` / `.dismiss` keep a register
+of open problems keyed by a stable `key`. A new problem notifies; raising it again only
+refreshes its card; critical re-notifies until dismissed; a resolved card clears itself.
+The card's one button, Dismiss, takes it off the phone; it comes back once after a day
+if the problem is still open.
 
 Notifications (household status): `sb_notify.notify` / `.clear` show one card per key,
 replaced in place and cleared when its ttl runs out.
@@ -11,6 +12,9 @@ replaced in place and cleared when its ttl runs out.
 The rules live in register.py and the card layouts in render.py (both HA-free and
 tested offline); this module stores the register, runs the clock and talks to the phone.
 External systems (PKDB, Windmill, Ansible) call the same services over HA's REST API.
+
+The sidebar page (/sb-notify) is one JS module served by this integration. It reads the
+two sensors' attributes and calls the services, so it needs no API of its own.
 """
 
 from __future__ import annotations
@@ -18,10 +22,13 @@ from __future__ import annotations
 import logging
 import time
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
 
+from homeassistant.components import frontend, panel_custom
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import CoreState, Event, HomeAssistant, ServiceCall, callback
@@ -29,13 +36,14 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.storage import Store
+from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
 from . import render
 from .const import (
-    ACTION_ACK, ACTION_SNOOZE, CONF_CRITICAL_HOURS, CONF_HEAD, CONF_NOTIFY, CONF_RESOLVED_MINUTES,
-    CONF_SNOOZE_HOURS, CONF_WARNING_HOURS, DEFAULTS, DOMAIN, EVENT_ALERT, SEVERITIES, SIGNAL_UPDATE,
-    STORE_KEY, STORE_VERSION, TAG_HEAD, TICK_SECONDS,
+    ACTION_DISMISS, CONF_CRITICAL_HOURS, CONF_DISMISS_HOURS, CONF_HEAD, CONF_NOTIFY, CONF_RESOLVED_MINUTES,
+    CONF_WARNING_HOURS, DEFAULTS, DOMAIN, EVENT_ALERT, LEGACY_ACTIONS, PANEL_URL, SEVERITIES, SIGNAL_UPDATE,
+    STATIC_URL, STORE_KEY, STORE_VERSION, TAG_HEAD, TICK_SECONDS,
 )
 from .register import Register
 
@@ -54,7 +62,7 @@ SCHEMAS = {
         vol.Optional("ttl"): _secs,
     }),
     "resolve": vol.Schema({vol.Required("key"): cv.string, vol.Optional("message"): cv.string}),
-    "ack": vol.Schema({vol.Required("key"): cv.string, vol.Optional("snooze"): _secs}),
+    "dismiss": vol.Schema({vol.Required("key"): cv.string}),
     "notify": vol.Schema({
         vol.Required("key"): cv.string,
         vol.Required("title"): cv.string,
@@ -83,7 +91,7 @@ class Notifier:
     def _seconds(self) -> dict[str, float]:
         o = self.opts
         return {"critical": o[CONF_CRITICAL_HOURS] * 3600, "warning": o[CONF_WARNING_HOURS] * 3600,
-                "resolved": o[CONF_RESOLVED_MINUTES] * 60, "snooze": o[CONF_SNOOZE_HOURS] * 3600}
+                "resolved": o[CONF_RESOLVED_MINUTES] * 60, "dismiss": o[CONF_DISMISS_HOURS] * 3600}
 
     async def async_load(self) -> None:
         data = await self.store.async_load() or {}
@@ -125,8 +133,8 @@ class Notifier:
                 fx = r.raise_(d.pop("key"), d.pop("title"), now, **d)
             case "resolve":
                 fx = r.resolve(d["key"], now, d.get("message"))
-            case "ack":
-                fx = r.ack(d["key"], now, d.get("snooze"))
+            case "dismiss":
+                fx = r.dismiss(d["key"], now)
             case "notify":
                 fx = r.notify(d.pop("key"), d.pop("title"), now, **d)
             case "clear":
@@ -135,11 +143,10 @@ class Notifier:
 
     async def _on_action(self, event: Event) -> None:
         action = str(event.data.get("action") or "")
-        now = time.time()
-        if action.startswith(ACTION_ACK):
-            await self.apply(self.register.ack(action[len(ACTION_ACK):], now))
-        elif action.startswith(ACTION_SNOOZE):
-            await self.apply(self.register.ack(action[len(ACTION_SNOOZE):], now, self.register.settings["snooze"]))
+        for prefix in (ACTION_DISMISS, *LEGACY_ACTIONS):
+            if action.startswith(prefix):
+                await self.apply(self.register.dismiss(action[len(prefix):], time.time()))
+                return
 
     # ── effects ───────────────────────────────────────────────────────────────
 
@@ -151,8 +158,7 @@ class Notifier:
                 case "event":
                     self.hass.bus.async_fire(EVENT_ALERT, {k: f[k] for k in ("key", "state", "severity")})
                 case "show_alert":
-                    await self._send(render.alert(r.alerts[f["key"]], loud=f["loud"], since=_since,
-                                                  snooze_hours=self.opts[CONF_SNOOZE_HOURS]))
+                    await self._send(render.alert(r.alerts[f["key"]], loud=f["loud"], since=_since))
                 case "show_resolved":
                     await self._send(render.resolved(r.alerts[f["key"]], linger_seconds=r.settings["resolved"]))
                 case "show_notice":
@@ -181,7 +187,25 @@ class Notifier:
                             exc_info=True)
 
 
+async def _register_panel(hass: HomeAssistant) -> None:
+    """The sidebar page. Once per HA run: an options change reloads the entry, not this."""
+    if hass.data.get(f"{DOMAIN}_panel"):
+        return
+    hass.data[f"{DOMAIN}_panel"] = True
+    integration = await async_get_integration(hass, DOMAIN)
+    try:
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(STATIC_URL, str(Path(__file__).parent / "frontend"), False)])
+        await panel_custom.async_register_panel(
+            hass, frontend_url_path=PANEL_URL, webcomponent_name="sb-notify-panel", sidebar_title="SB Notify",
+            sidebar_icon="mdi:bell-badge-outline", module_url=f"{STATIC_URL}/sb-notify.js?v={integration.version}",
+            embed_iframe=False, require_admin=False)
+    except Exception:  # noqa: BLE001 — the page is a convenience; the notifications must work without it
+        _LOGGER.exception("SB Notify: could not register the sidebar page")
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    await _register_panel(hass)
     notifier = Notifier(hass, entry)
     await notifier.async_load()
     entry.runtime_data = notifier
@@ -207,3 +231,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, name)
     hass.data.pop(DOMAIN, None)
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Integration deleted: take the page out of the sidebar too."""
+    if hass.data.pop(f"{DOMAIN}_panel", None):
+        frontend.async_remove_panel(hass, PANEL_URL)

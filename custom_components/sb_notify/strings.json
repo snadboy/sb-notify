@@ -20,11 +20,12 @@
           "critical_renotify_hours": "Critical: notify again every",
           "warning_renotify_hours": "Warning: notify once more after",
           "resolved_minutes": "Resolved cards stay for",
-          "snooze_hours": "Snooze button length",
-          "head_card": "Status card at the top of the Alerts group"
+          "head_card": "Status card at the top of the Alerts group",
+          "dismiss_return_hours": "Dismissed alerts still open come back after"
         },
         "data_description": {
-          "notify_service": "A mobile_app notify service, e.g. notify.mobile_app_pixel_snadboy"
+          "notify_service": "A mobile_app notify service, e.g. notify.mobile_app_pixel_snadboy",
+          "dismiss_return_hours": "0 = a dismissed alert stays off the phone until it gets worse"
         }
       }
     }
@@ -34,48 +35,98 @@
       "name": "Raise alert",
       "description": "Open a problem, or refresh it if it is already open. Notifies once; notifies again only if the severity goes up.",
       "fields": {
-        "key": {"name": "Key", "description": "Stable id for this problem, e.g. pkdb:task:tier2_backfill."},
-        "title": {"name": "Title", "description": "One line, shown on the phone."},
-        "message": {"name": "Message", "description": "Detail; replaced on every raise."},
-        "severity": {"name": "Severity", "description": "critical rings and repeats until acknowledged; warning is silent and repeats once; info never pushes."},
-        "url": {"name": "URL", "description": "Where a tap on the card goes."},
-        "source": {"name": "Source", "description": "Which system raised it, e.g. pkdb."},
-        "ttl": {"name": "TTL", "description": "Resolve automatically if not raised again within this time."}
+        "key": {
+          "name": "Key",
+          "description": "Stable id for this problem, e.g. pkdb:task:tier2_backfill."
+        },
+        "title": {
+          "name": "Title",
+          "description": "One line, shown on the phone."
+        },
+        "message": {
+          "name": "Message",
+          "description": "Detail; replaced on every raise."
+        },
+        "severity": {
+          "name": "Severity",
+          "description": "critical rings and repeats until dismissed; warning is silent and repeats once; info never pushes."
+        },
+        "url": {
+          "name": "URL",
+          "description": "Where a tap on the card goes."
+        },
+        "source": {
+          "name": "Source",
+          "description": "Which system raised it, e.g. pkdb."
+        },
+        "ttl": {
+          "name": "TTL",
+          "description": "Resolve automatically if not raised again within this time."
+        }
       }
     },
     "resolve": {
       "name": "Resolve alert",
       "description": "Mark a problem fixed. Its card becomes a short 'Resolved' card that clears itself.",
       "fields": {
-        "key": {"name": "Key", "description": "The key it was raised with."},
-        "message": {"name": "Message", "description": "Shown on the Resolved card."}
-      }
-    },
-    "ack": {
-      "name": "Acknowledge alert",
-      "description": "Stop re-notifying. With a snooze, the card leaves the phone and comes back when the snooze ends, if the problem is still open.",
-      "fields": {
-        "key": {"name": "Key", "description": "The key it was raised with."},
-        "snooze": {"name": "Snooze", "description": "Hide it for this long."}
+        "key": {
+          "name": "Key",
+          "description": "The key it was raised with."
+        },
+        "message": {
+          "name": "Message",
+          "description": "Shown on the Resolved card."
+        }
       }
     },
     "notify": {
       "name": "Notify",
       "description": "Show a household notice in the Notifications group, replacing any notice with the same key.",
       "fields": {
-        "key": {"name": "Key", "description": "Stable id, e.g. laundry:dryer."},
-        "title": {"name": "Title", "description": "One line, shown on the phone."},
-        "message": {"name": "Message", "description": "Detail."},
-        "url": {"name": "URL", "description": "Where a tap on the card goes."},
-        "ttl": {"name": "TTL", "description": "Clear it after this long (default 4 hours; 0 keeps it until cleared)."},
-        "loud": {"name": "Loud", "description": "Use the channel with sound."}
+        "key": {
+          "name": "Key",
+          "description": "Stable id, e.g. laundry:dryer."
+        },
+        "title": {
+          "name": "Title",
+          "description": "One line, shown on the phone."
+        },
+        "message": {
+          "name": "Message",
+          "description": "Detail."
+        },
+        "url": {
+          "name": "URL",
+          "description": "Where a tap on the card goes."
+        },
+        "ttl": {
+          "name": "TTL",
+          "description": "Clear it after this long (default 4 hours; 0 keeps it until cleared)."
+        },
+        "loud": {
+          "name": "Loud",
+          "description": "Use the channel with sound."
+        }
       }
     },
     "clear": {
       "name": "Clear notice",
       "description": "Remove a notice from the phone.",
       "fields": {
-        "key": {"name": "Key", "description": "The key it was shown with."}
+        "key": {
+          "name": "Key",
+          "description": "The key it was shown with."
+        }
+      }
+    },
+    "dismiss": {
+      "name": "Dismiss alert",
+      "description": "Take an alert off the phone and stop reminders. It stays open until resolved, comes back once after the set time if still open, and at once if it gets worse.",
+      "fields": {
+        "key": {
+          "name": "Key",
+          "description": "The key it was raised with."
+        }
       }
     }
   }

@@ -46,15 +46,12 @@ resolve:
       selector:
         text:
 
-ack:
+dismiss:
   fields:
     key:
       required: true
       selector:
         text:
-    snooze:
-      selector:
-        duration:
 
 notify:
   fields:

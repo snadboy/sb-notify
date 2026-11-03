@@ -10,9 +10,14 @@ carry out; the register itself never talks to a phone:
     {"op": "clear", "tag": t}                      remove a card from the phone
     {"op": "event", "key": k, "state": s, "severity": v}   an alert changed state
 
-Alerts:  raise → open → (ack → acked) → resolve → resolved → gone after `resolved` secs.
-         Raising an open key again only refreshes it; it notifies again only when the
-         severity goes UP. `info` alerts are kept and shown in the sensor, never pushed.
+Alerts:  raise → open → (dismiss → dismissed) → resolve → resolved → gone after `resolved`
+         secs, into `history`. Raising an open key again only refreshes it; it notifies
+         again only when the severity goes UP. `info` alerts are kept and shown in the
+         sensor, never pushed.
+Dismiss: the card leaves the phone and reminders stop. The alert stays in the register
+         until resolved, and comes back to the phone once after `dismiss` seconds if still
+         open (0 = never), or at once if its severity goes up. One button, by design
+         (2026-11-02): a dismissed problem must not be able to go quiet for good.
 Notices: notify → shown, replaced by key → cleared by `clear` or when their ttl runs out.
 """
 
@@ -21,7 +26,7 @@ from __future__ import annotations
 from typing import Any
 
 from .const import (
-    DEFAULT_NOTICE_TTL, SEVERITIES, ST_ACKED, ST_OPEN, ST_RESOLVED, TAG_ALERT, TAG_NOTICE,
+    DEFAULT_NOTICE_TTL, HISTORY_SIZE, SEVERITIES, ST_DISMISSED, ST_OPEN, ST_RESOLVED, TAG_ALERT, TAG_NOTICE,
 )
 
 
@@ -37,17 +42,28 @@ def notice_tag(key: str) -> str:
     return TAG_NOTICE + key
 
 
+def _migrate(a: dict) -> dict:
+    """0.1.0 stored `acked` + `snoozed_until`; both became dismissed + `returns_at`."""
+    if "snoozed_until" in a:
+        a["returns_at"] = a.pop("snoozed_until")
+    a.setdefault("returns_at", None)
+    if a["state"] == "acked":
+        a["state"] = ST_DISMISSED
+    return a
+
+
 class Register:
-    """`settings` (seconds): critical, warning, resolved, snooze."""
+    """`settings` (seconds): critical, warning, resolved, dismiss (0 = a dismissed alert never returns)."""
 
     def __init__(self, settings: dict[str, float], data: dict | None = None) -> None:
         self.settings = settings
         data = data or {}
-        self.alerts: dict[str, dict[str, Any]] = data.get("alerts", {})
+        self.alerts: dict[str, dict[str, Any]] = {k: _migrate(a) for k, a in data.get("alerts", {}).items()}
         self.notices: dict[str, dict[str, Any]] = data.get("notices", {})
+        self.history: list[dict[str, Any]] = data.get("history", [])
 
     def dump(self) -> dict:
-        return {"alerts": self.alerts, "notices": self.notices}
+        return {"alerts": self.alerts, "notices": self.notices, "history": self.history}
 
     # ── alerts ────────────────────────────────────────────────────────────────
 
@@ -59,11 +75,10 @@ class Register:
             a = self.alerts[key] = {
                 "key": key, "title": title, "message": message, "severity": severity, "url": url,
                 "source": source, "ttl": ttl, "state": ST_OPEN, "first_seen": now, "last_seen": now,
-                "count": 1, "notified_at": None, "notify_count": 0, "snoozed_until": None,
+                "count": 1, "notified_at": None, "notify_count": 0, "returns_at": None,
                 "resolved_at": None, "resolve_message": None,
             }
-            fx = [self._event(a)]
-            return fx + self._push(a, now, loud=True)
+            return [self._event(a)] + self._push(a, now, loud=True)
 
         went_up = rank(severity) > rank(a["severity"])
         a.update(title=title, message=message, severity=severity, last_seen=now)
@@ -71,11 +86,11 @@ class Register:
             if value is not None:
                 a[field] = value
         a["count"] += 1
-        if went_up:                       # worse than before: un-ack, un-snooze, notify again
+        if went_up:                       # worse than before: back on the phone, loud
             a["state"] = ST_OPEN
-            a["snoozed_until"] = None
+            a["returns_at"] = None
             return [self._event(a)] + self._push(a, now, loud=True)
-        if a["snoozed_until"]:            # snoozed: keep it off the phone until the snooze ends
+        if a["state"] == ST_DISMISSED:    # dismissed: stays off the phone
             return []
         return self._push(a, now, loud=False, count=False)   # refresh the text silently
 
@@ -83,23 +98,24 @@ class Register:
         a = self.alerts.get(key)
         if a is None or a["state"] == ST_RESOLVED:
             return []
-        a.update(state=ST_RESOLVED, resolved_at=now, resolve_message=message, snoozed_until=None)
+        on_phone = a["state"] == ST_OPEN and a["notify_count"] > 0
+        a.update(state=ST_RESOLVED, resolved_at=now, resolve_message=message, returns_at=None)
         fx = [self._event(a)]
-        if a["notify_count"]:             # it reached the phone: say so there, briefly
+        if on_phone:                      # say so where it was seen, briefly
             fx.append({"op": "show_resolved", "key": key})
+        a["on_phone"] = on_phone
         return fx
 
-    def ack(self, key: str, now: float, snooze: float | None = None) -> list[dict]:
+    def dismiss(self, key: str, now: float) -> list[dict]:
         a = self.alerts.get(key)
-        if a is None or a["state"] == ST_RESOLVED:
+        if a is None or a["state"] != ST_OPEN:
             return []
-        a["state"] = ST_ACKED
+        a["state"] = ST_DISMISSED
+        back = self.settings.get("dismiss") or 0
+        a["returns_at"] = now + back if back > 0 else None
         fx = [self._event(a)]
-        if snooze:
-            a["snoozed_until"] = now + snooze
-            return fx + [{"op": "clear", "tag": alert_tag(key)}]
-        if a["severity"] != "info":
-            fx.append({"op": "show_alert", "key": key, "loud": False})
+        if a["notify_count"]:
+            fx.append({"op": "clear", "tag": alert_tag(key)})
         return fx
 
     # ── notices ───────────────────────────────────────────────────────────────
@@ -121,26 +137,27 @@ class Register:
     # ── time ──────────────────────────────────────────────────────────────────
 
     def tick(self, now: float) -> list[dict]:
-        """Snooze ends, re-notification, stale TTLs, and removing what has run its course."""
+        """Dismissals ending, re-notification, stale TTLs, and retiring what has run its course."""
         fx: list[dict] = []
         s = self.settings
         for key, a in list(self.alerts.items()):
             if a["state"] == ST_RESOLVED:
                 if now - a["resolved_at"] >= s["resolved"]:
                     del self.alerts[key]
-                    if a["notify_count"]:
+                    self._remember(a)
+                    if a.get("on_phone"):
                         fx.append({"op": "clear", "tag": alert_tag(key)})
                 continue
             if a["ttl"] and now - a["last_seen"] > a["ttl"]:
                 fx += self.resolve(key, now, "No longer reported; assumed fixed")
                 continue
-            if a["snoozed_until"]:
-                if now >= a["snoozed_until"]:
-                    a["snoozed_until"] = None
+            if a["state"] == ST_DISMISSED:
+                if a["returns_at"] is not None and now >= a["returns_at"]:
+                    a["returns_at"] = None
                     a["state"] = ST_OPEN
                     fx += [self._event(a)] + self._push(a, now, loud=True)
                 continue
-            if a["state"] != ST_OPEN or a["notified_at"] is None:
+            if a["notified_at"] is None:
                 continue
             since = now - a["notified_at"]
             if a["severity"] == "critical" and since >= s["critical"]:
@@ -155,11 +172,16 @@ class Register:
     # ── views ─────────────────────────────────────────────────────────────────
 
     def open_alerts(self) -> list[dict]:
-        """Open and acked alerts, worst first, then oldest first."""
+        """Open and dismissed alerts, worst first, then oldest first."""
         live = [a for a in self.alerts.values() if a["state"] != ST_RESOLVED]
         return sorted(live, key=lambda a: (-rank(a["severity"]), a["first_seen"]))
 
     # ── internals ─────────────────────────────────────────────────────────────
+
+    def _remember(self, a: dict) -> None:
+        self.history.insert(0, {k: a.get(k) for k in (
+            "key", "title", "severity", "source", "count", "first_seen", "resolved_at", "resolve_message")})
+        del self.history[HISTORY_SIZE:]
 
     def _push(self, a: dict, now: float, *, loud: bool, count: bool = True) -> list[dict]:
         if a["severity"] == "info":
