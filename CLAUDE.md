@@ -68,7 +68,20 @@ config with `docker run --rm --entrypoint rm -v …` (a plain rm fails silently 
 
 1. Confirm on the real phone: Dismiss button, group bundling, channel sounds, head-card order.
 2. Migrate the homelab automations (Kuma, power, NUT, Matter ×2, utilities watchdog, SDR)
-   to raise/resolve; laundry, Metra and garage to notify/clear. Washer watchdog currently
-   targets the deleted Pixel 10 device (3b529f2d…) and reaches no one.
+   to raise/resolve. Open question: power outage uses the phone's `alarm` channel today;
+   SB Notify's critical channel may not match it (DND bypass) — ask before moving it.
+   Garage confirm stays a direct push: it needs its own Open/Cancel action buttons.
+
+## Migrated (2026-11-03)
+
+| Automation | Now | Key |
+| --- | --- | --- |
+| `automation.monitor_washer` (Blackshome appliance blueprint) | blueprint push options off; start/watchdog/end custom actions → `sb_notify.notify`; watchdog device list emptied (pointed at the deleted Pixel 10) | `laundry:washer` |
+| `automation.monitor_dryer` (same blueprint) | start/end custom actions → `sb_notify.notify` | `laundry:dryer` |
+| `automation.metra_commute_delay_push` | delay → notify loud, 3 h; cleared → notify quiet, 30 min | `metra:inbound` / `metra:outbound` |
+| `automation.metra_new_schedule_push` | notify quiet, 24 h | `metra:schedule` |
+
+Old sticky laundry cards (tags `Laundry - Wash`, `Laundry - Dry`, `Laundry - Wash Watchdog`)
+were cleared on the phone. Not yet seen through a real wash/dry cycle or Metra delay.
 3. PKDB: `notify.sh` incident channel (health_check anomaly codes → keys), then retire
    its Gotify route and heartbeat bulletin. Bulletin triage lane reads `sensor.sb_notify_alerts`.
