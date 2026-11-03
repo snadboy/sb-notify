@@ -1,0 +1,91 @@
+raise:
+  fields:
+    key:
+      required: true
+      example: "pkdb:task:tier2_backfill"
+      selector:
+        text:
+    title:
+      required: true
+      example: "PKDB: tier2_backfill failing"
+      selector:
+        text:
+    message:
+      example: "1,589 consecutive failures; doc 1962 returns HTTP 400"
+      selector:
+        text:
+          multiline: true
+    severity:
+      default: warning
+      selector:
+        select:
+          options:
+            - critical
+            - warning
+            - info
+    url:
+      example: "https://pkdb.swallow-spectrum.ts.net/"
+      selector:
+        text:
+    source:
+      example: "pkdb"
+      selector:
+        text:
+    ttl:
+      selector:
+        duration:
+
+resolve:
+  fields:
+    key:
+      required: true
+      selector:
+        text:
+    message:
+      example: "Back to normal"
+      selector:
+        text:
+
+ack:
+  fields:
+    key:
+      required: true
+      selector:
+        text:
+    snooze:
+      selector:
+        duration:
+
+notify:
+  fields:
+    key:
+      required: true
+      example: "laundry:dryer"
+      selector:
+        text:
+    title:
+      required: true
+      example: "Dryer done"
+      selector:
+        text:
+    message:
+      selector:
+        text:
+          multiline: true
+    url:
+      selector:
+        text:
+    ttl:
+      selector:
+        duration:
+    loud:
+      default: false
+      selector:
+        boolean:
+
+clear:
+  fields:
+    key:
+      required: true
+      selector:
+        text:

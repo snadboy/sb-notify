@@ -1,0 +1,82 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "SB Notify is already set up.",
+      "single_instance_allowed": "SB Notify is already set up."
+    },
+    "step": {
+      "user": {
+        "title": "SB Notify",
+        "description": "One door for phone notifications: an Alerts group for problems and a Notifications group for household notices."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "SB Notify",
+        "data": {
+          "notify_service": "Phone notify service",
+          "critical_renotify_hours": "Critical: notify again every",
+          "warning_renotify_hours": "Warning: notify once more after",
+          "resolved_minutes": "Resolved cards stay for",
+          "snooze_hours": "Snooze button length",
+          "head_card": "Status card at the top of the Alerts group"
+        },
+        "data_description": {
+          "notify_service": "A mobile_app notify service, e.g. notify.mobile_app_pixel_snadboy"
+        }
+      }
+    }
+  },
+  "services": {
+    "raise": {
+      "name": "Raise alert",
+      "description": "Open a problem, or refresh it if it is already open. Notifies once; notifies again only if the severity goes up.",
+      "fields": {
+        "key": {"name": "Key", "description": "Stable id for this problem, e.g. pkdb:task:tier2_backfill."},
+        "title": {"name": "Title", "description": "One line, shown on the phone."},
+        "message": {"name": "Message", "description": "Detail; replaced on every raise."},
+        "severity": {"name": "Severity", "description": "critical rings and repeats until acknowledged; warning is silent and repeats once; info never pushes."},
+        "url": {"name": "URL", "description": "Where a tap on the card goes."},
+        "source": {"name": "Source", "description": "Which system raised it, e.g. pkdb."},
+        "ttl": {"name": "TTL", "description": "Resolve automatically if not raised again within this time."}
+      }
+    },
+    "resolve": {
+      "name": "Resolve alert",
+      "description": "Mark a problem fixed. Its card becomes a short 'Resolved' card that clears itself.",
+      "fields": {
+        "key": {"name": "Key", "description": "The key it was raised with."},
+        "message": {"name": "Message", "description": "Shown on the Resolved card."}
+      }
+    },
+    "ack": {
+      "name": "Acknowledge alert",
+      "description": "Stop re-notifying. With a snooze, the card leaves the phone and comes back when the snooze ends, if the problem is still open.",
+      "fields": {
+        "key": {"name": "Key", "description": "The key it was raised with."},
+        "snooze": {"name": "Snooze", "description": "Hide it for this long."}
+      }
+    },
+    "notify": {
+      "name": "Notify",
+      "description": "Show a household notice in the Notifications group, replacing any notice with the same key.",
+      "fields": {
+        "key": {"name": "Key", "description": "Stable id, e.g. laundry:dryer."},
+        "title": {"name": "Title", "description": "One line, shown on the phone."},
+        "message": {"name": "Message", "description": "Detail."},
+        "url": {"name": "URL", "description": "Where a tap on the card goes."},
+        "ttl": {"name": "TTL", "description": "Clear it after this long (default 4 hours; 0 keeps it until cleared)."},
+        "loud": {"name": "Loud", "description": "Use the channel with sound."}
+      }
+    },
+    "clear": {
+      "name": "Clear notice",
+      "description": "Remove a notice from the phone.",
+      "fields": {
+        "key": {"name": "Key", "description": "The key it was shown with."}
+      }
+    }
+  }
+}
