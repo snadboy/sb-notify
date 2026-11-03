@@ -21,7 +21,7 @@ One door for phone notifications in Home Assistant, in two Android groups:
 | `sb_notify.notify` | `key`, `title`, `message`, `url`, `ttl` (default 4 h, 0 = until cleared), `loud` | Show or replace a notice. |
 | `sb_notify.clear` | `key` | Remove a notice. |
 
-| Severity | On open | Re-notify while unacked | Channel |
+| Severity | On open | Re-notify | Channel |
 | --- | --- | --- | --- |
 | critical | sound | every 4 h until dismissed | `Alerts: critical` (high) |
 | warning | silent | once, after 24 h | `Alerts` (low) |

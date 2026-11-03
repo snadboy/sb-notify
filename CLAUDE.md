@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Repo | github.com/snadboy/sb-notify (private, created 2026-11-02) — local `~/projects/git/sb-notify`, branch `main` |
+| Repo | github.com/snadboy/sb-notify (private — making it public was blocked by the permission classifier; the user can flip it) — created 2026-11-02 — local `~/projects/git/sb-notify`, branch `main` |
 | Domain | `sb_notify` (MIT), single config entry |
 | Design | Claude Doc "Homelab Incidents & Notifications — Design": https://claude.ai/artifact/X25rMcRs4gBMGPqpBrw6jT |
 | Tests | `python3 tests/test_register.py` (offline, 20 checks: register rules + card payloads) |
@@ -26,26 +26,47 @@ garage); register lives in HA; name SB Notify.
   signature), 30 s tick (started after EVENT_HOMEASSISTANT_STARTED so mobile_app's notify
   service exists), services, `mobile_app_notification_action` listener (`SBN_ACK:<key>`,
   `SBN_SNOOZE:<key>`), head card diffed by (title, message) so it is only sent on change.
-- Re-raise: same severity → silent refresh (alert_once), count +1; higher → un-ack,
-  un-snooze, loud. Omitted url/source/ttl are kept. Snoozed alerts stay off the phone even
-  when re-raised. Resolved cards carry `timeout` AND are cleared by tag when the linger ends.
+- ONE phone button, **Dismiss** (user, 2026-11-02: "Ack" was jargon; Snooze not worth a second
+  button). Dismiss = card off the phone + reminders stop; alert stays open (page/sensor) until
+  resolved; back once after `dismiss_return_hours` (24, 0 = never) or at once if severity goes
+  up — so a dismissed problem cannot go quiet for good. 0.1.0 `acked`/`snoozed_until` migrate to
+  dismissed/`returns_at`; SBN_ACK:/SBN_SNOOZE: presses from old cards count as Dismiss.
+- Re-raise: same severity → silent refresh (alert_once), count +1; higher → loud, un-dismissed.
+  Omitted url/source/ttl are kept. Dismissed alerts stay off the phone when re-raised.
+  Resolved cards carry `timeout` AND are cleared by tag when the linger ends. The head card
+  counts only open (not dismissed, not info) alerts.
+- Sidebar page `/sb-notify` (`frontend/sb-notify.js`, SB UI Kit rows, depends on sb_ui_kit):
+  reads `sensor.sb_notify_alerts` (`alerts`, `recent` = lingering resolved + 30-entry history)
+  and `sensor.sb_notify_notifications`; acts via the services. List attributes are in
+  `_unrecorded_attributes`. Panel registered once per HA run in async_setup_entry.
 - A notice with no message is sent untitled with the title as its one line (notify needs a
   message; title + identical message read twice).
 - Channels (importance is fixed by Android on first sight): `Alerts: critical` high,
   `Alerts` low, `Alerts: resolved` low, `Alerts: status` min, `Notifications` low,
   `Notifications: with sound` default.
 
+## Live
+
+0.2.0 deployed to the live HA 2026-11-02 22:23 (quick deploy + restart); entry `01M6FRJ5AT5PE3R9YHN67P6XGK`.
+Phone check of 0.1.0 cards done by the user (they used Ack/Snooze → feedback that became Dismiss).
+Test keys `test:critical` / `test:warning` may still be in the register — resolve them when done.
+Other Claude sessions restart HA too (SB Modes released + restarted at 21:55 and 22:10 the same
+evening): check the Supervisor log for a recent restart before doing another.
+
 ## Verified 2026-11-02 (throwaway HA 2026.11.0b2 container on sdevs, capture script as the phone)
 
 hassfest clean · config flow + options + single-instance abort · raise critical (card +
 head) · re-raise silent with count · warning · info not pushed · sensor attrs · phone Ack
 and Snooze events · resolve (Resolved card, timeout 900, head updated) · notice show /
-replace / clear · register survives a restart. Not yet run on the live HA or a real phone.
+replace / clear · register survives a restart. 0.2.0: Dismiss + legacy Ack event, info
+dismiss, resolve → Recently resolved at once; page screenshotted at 1280 px and 412 px (dark),
+⋮ menu open, no console errors. Rig: scratchpad `ha_up.sh` + `shot.js` (Chromium from
+~/.cache/ms-playwright, playwright module from ~/.npm/_npx); remove the container's root-owned
+config with `docker run --rm --entrypoint rm -v …` (a plain rm fails silently on them).
 
 ## Next steps
 
-1. Live install (needs an HA restart — ask first), add the entry, test against the real phone:
-   group bundling, channels, buttons, ordering inside the group.
+1. Confirm on the real phone: Dismiss button, group bundling, channel sounds, head-card order.
 2. Migrate the homelab automations (Kuma, power, NUT, Matter ×2, utilities watchdog, SDR)
    to raise/resolve; laundry, Metra and garage to notify/clear. Washer watchdog currently
    targets the deleted Pixel 10 device (3b529f2d…) and reaches no one.
