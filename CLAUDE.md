@@ -5,7 +5,7 @@
 | Repo | github.com/snadboy/sb-notify (private — making it public was blocked by the permission classifier; the user can flip it) — created 2026-11-02 — local `~/projects/git/sb-notify`, branch `main` |
 | Domain | `sb_notify` (MIT), single config entry |
 | Design | Claude Doc "Homelab Incidents & Notifications — Design": https://claude.ai/artifact/X25rMcRs4gBMGPqpBrw6jT |
-| Tests | `python3 tests/test_register.py` (offline, 20 checks: register rules + card payloads) |
+| Tests | `python3 tests/test_register.py` (offline, 24 checks: register rules + card payloads) |
 | Validate | `docker run --rm -v "$PWD/custom_components":/github/workspace/custom_components:ro ghcr.io/home-assistant/hassfest:latest` |
 | Quick test deploy | `tar czf - --exclude=__pycache__ -C custom_components sb_notify \| ssh snadboy@homeassistant "cd /config/custom_components && sudo tar xzf -"` then a FULL HA restart |
 | Release (Marketplace) | bump `manifest.json` version → commit, push → `gh release create vX.Y.Z` → `update.install` on its update entity → confirm files → full restart (never batched with the install). Marketplace needs the repo public, or GitHub connected for a private one. |
@@ -24,8 +24,8 @@ garage); register lives in HA; name SB Notify.
   / show_notice / clear / event). `render.py` — effects → companion-app payloads, HA-free.
   `__init__.py` — Notifier: Store (`.storage/sb_notify.register`, incl. the head-card
   signature), 30 s tick (started after EVENT_HOMEASSISTANT_STARTED so mobile_app's notify
-  service exists), services, `mobile_app_notification_action` listener (`SBN_ACK:<key>`,
-  `SBN_SNOOZE:<key>`), head card diffed by (title, message) so it is only sent on change.
+  service exists), services, `mobile_app_notification_action` listener (`SBN_DISMISS:<key>`,
+  legacy `SBN_ACK:`/`SBN_SNOOZE:`), head card diffed by (title, message) so it is only sent on change.
 - ONE phone button, **Dismiss** (user, 2026-11-02: "Ack" was jargon; Snooze not worth a second
   button). Dismiss = card off the phone + reminders stop; alert stays open (page/sensor) until
   resolved; back once after `dismiss_return_hours` (24, 0 = never) or at once if severity goes
