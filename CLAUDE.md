@@ -67,10 +67,8 @@ config with `docker run --rm --entrypoint rm -v …` (a plain rm fails silently 
 ## Next steps
 
 1. Confirm on the real phone: Dismiss button, group bundling, channel sounds, head-card order.
-2. Migrate the homelab automations (Kuma, power, NUT, Matter ×2, utilities watchdog, SDR)
-   to raise/resolve. Open question: power outage uses the phone's `alarm` channel today;
-   SB Notify's critical channel may not match it (DND bypass) — ask before moving it.
-   Garage confirm stays a direct push: it needs its own Open/Cancel action buttons.
+2. Decide the always-on `automation.homelab_ongoing_status_card` (direct push, own channel
+   `Homelab Status`): keep, fold into the Alerts group, or retire in favour of the head card.
 
 ## Migrated (2026-11-03)
 
@@ -80,6 +78,22 @@ config with `docker run --rm --entrypoint rm -v …` (a plain rm fails silently 
 | `automation.monitor_dryer` (same blueprint) | start/end custom actions → `sb_notify.notify` | `laundry:dryer` |
 | `automation.metra_commute_delay_push` | delay → notify loud, 3 h; cleared → notify quiet, 30 min | `metra:inbound` / `metra:outbound` |
 | `automation.metra_new_schedule_push` | notify quiet, 24 h | `metra:schedule` |
+| `automation.power_outage_detect_and_alert` | raise critical, channel `alarm`; spreading + rack-prod CRITICAL `escalate`; restored → resolve | `power:outage` |
+| `automation.power_outage_nut_server_unreachable` | raise warning / resolve | `nut:blind:<sensor>` |
+| `automation.utilities_watchdog_independent_of_kuma` | kuma-blind raise critical; host-off raise critical + `escalate`; recovered → resolve | `utilities:watchdog` |
+| `automation.uptime_kuma_outage_push_replace_in_place` | one monitor: raise warning; 5+: raise critical; recoveries resolve (a monitor recovering during a storm resolves its own too) | `kuma-<monitor>`, `kuma:storm` |
+| `automation.matter_misbehaving_devices_replace_in_place_push` | raise warning; recovered → resolve (also resolves the mass alert) | `matter:misbehaving` |
+| `automation.matter_mass_unavailable_alert` | raise critical; `wait_template` for the negated trigger → resolve | `matter:mass-unavailable` |
+| `automation.sdr_meter_pipeline_stale_alert` | raise critical, ttl 2.5 h, `escalate` on the 2 h re-nag (no all-clear existed) | `sdr:pipeline` |
+
+HA bell (persistent_notification) calls were left as they were. Garage confirm stays a direct
+push (needs its own Open/Cancel actions). Old-style cards were cleared by tag on 2026-11-03,
+and the one monitor down at the time (unifi-toolkit) was raised into SB Notify by hand.
+
+Found 2026-11-03: `input_datetime.power_outage_started` was stuck at 2026-11-02 11:06 although
+all four UPSes were OL — a ~60 s nas + network-gateway blip landed right on the 60 s debounce
+and the restore branch never ran (traces gone, cause not proven). While stuck it suppressed
+every NUT-blind alert. Reset to the 1970 sentinel by hand.
 
 Old sticky laundry cards (tags `Laundry - Wash`, `Laundry - Dry`, `Laundry - Wash Watchdog`)
 were cleared on the phone. Not yet seen through a real wash/dry cycle or Metra delay.
