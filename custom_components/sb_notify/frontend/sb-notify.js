@@ -7,7 +7,7 @@
  *
  * Row style: window.SBKit from the SB UI Kit integration (a manifest dependency).
  */
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 const kit = () => (window.SBKit && window.SBKit.api >= 1 ? window.SBKit : null);
 let kitPromise = null;

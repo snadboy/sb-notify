@@ -60,6 +60,8 @@ SCHEMAS = {
         vol.Optional("url"): cv.string,
         vol.Optional("source"): cv.string,
         vol.Optional("ttl"): _secs,
+        vol.Optional("channel"): cv.string,
+        vol.Optional("escalate", default=False): cv.boolean,
     }),
     "resolve": vol.Schema({vol.Required("key"): cv.string, vol.Optional("message"): cv.string}),
     "dismiss": vol.Schema({vol.Required("key"): cv.string}),

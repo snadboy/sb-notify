@@ -68,13 +68,16 @@ class Register:
     # ── alerts ────────────────────────────────────────────────────────────────
 
     def raise_(self, key: str, title: str, now: float, *, message: str = "", severity: str = "warning",
-               url: str | None = None, source: str | None = None, ttl: float | None = None) -> list[dict]:
+               url: str | None = None, source: str | None = None, ttl: float | None = None,
+               channel: str | None = None, escalate: bool = False) -> list[dict]:
+        """`escalate`: this update is worse even at the same severity (an outage spreading):
+        notify with sound and bring the card back if it was dismissed."""
         severity = severity if severity in SEVERITIES else "warning"
         a = self.alerts.get(key)
         if a is None or a["state"] == ST_RESOLVED:
             a = self.alerts[key] = {
                 "key": key, "title": title, "message": message, "severity": severity, "url": url,
-                "source": source, "ttl": ttl, "state": ST_OPEN, "first_seen": now, "last_seen": now,
+                "source": source, "ttl": ttl, "channel": channel, "state": ST_OPEN, "first_seen": now, "last_seen": now,
                 "count": 1, "notified_at": None, "notify_count": 0, "returns_at": None,
                 "resolved_at": None, "resolve_message": None,
             }
@@ -82,11 +85,11 @@ class Register:
 
         went_up = rank(severity) > rank(a["severity"])
         a.update(title=title, message=message, severity=severity, last_seen=now)
-        for field, value in (("url", url), ("source", source), ("ttl", ttl)):   # left out = keep
+        for field, value in (("url", url), ("source", source), ("ttl", ttl), ("channel", channel)):   # left out = keep
             if value is not None:
                 a[field] = value
         a["count"] += 1
-        if went_up:                       # worse than before: back on the phone, loud
+        if went_up or escalate:           # worse than before: back on the phone, loud
             a["state"] = ST_OPEN
             a["returns_at"] = None
             return [self._event(a)] + self._push(a, now, loud=True)

@@ -54,6 +54,16 @@ def test_reraise_higher_severity_undismisses_and_notifies_loud():
     assert r.alerts["k"]["state"] == "open" and r.alerts["k"]["returns_at"] is None
 
 
+def test_escalate_rings_again_and_undismisses():
+    r = R.Register(SETTINGS)
+    r.raise_("power:outage", "Power outage", 0, severity="critical", channel="alarm")
+    assert shows(r.raise_("power:outage", "Power outage", 5, severity="critical")) == [("power:outage", False)]
+    r.dismiss("power:outage", 10)
+    fx = r.raise_("power:outage", "Power outage - spreading", 20, severity="critical", escalate=True)
+    assert shows(fx) == [("power:outage", True)] and r.alerts["power:outage"]["state"] == "open"
+    assert ops(fx, "event")[0]["state"] == "open"
+
+
 def test_info_never_pushes():
     r = R.Register(SETTINGS)
     assert shows(r.raise_("k", "t", 0, severity="info")) == []
@@ -204,6 +214,16 @@ def test_render_alert_buttons_and_channels():
     assert d["actions"] == [{"action": "SBN_DISMISS:k", "title": "Dismiss"},
                             {"action": "URI", "title": "Open", "uri": "https://x/"}]   # url kept on re-raise
     assert p["message"] == "m\nsince t0 · 2 times"
+
+
+def test_render_channel_override_kept_across_reraise():
+    r = R.Register(SETTINGS)
+    r.raise_("power:outage", "Power outage", 0, severity="critical", channel="alarm")
+    r.raise_("power:outage", "Power outage - spreading", 5, severity="critical")
+    a = r.alerts["power:outage"]
+    assert a["channel"] == "alarm" and V.alert(a, loud=False, since=since)["data"]["channel"] == "alarm"
+    r.resolve("power:outage", 9)
+    assert V.resolved(a, linger_seconds=900)["data"]["channel"] == C.CH_RESOLVED
 
 
 def test_render_warning_is_quiet_channel():

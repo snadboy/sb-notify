@@ -15,7 +15,7 @@ One door for phone notifications in Home Assistant, in two Android groups:
 
 | Service | Fields | Effect |
 | --- | --- | --- |
-| `sb_notify.raise` | `key`, `title`, `message`, `severity` (critical / warning / info), `url`, `source`, `ttl` | Open a problem, or refresh it. Notifies again only if severity goes up. `info` never pushes. With `ttl`, it resolves itself if not raised again in time. |
+| `sb_notify.raise` | `key`, `title`, `message`, `severity` (critical / warning / info), `url`, `source`, `ttl`, `channel`, `escalate` | Open a problem, or refresh it. Notifies again only if severity goes up, or with `escalate: true` (an outage spreading: rings again, un-dismisses). `info` never pushes. With `ttl`, it resolves itself if not raised again in time. `channel` uses a phone channel of your own instead of the severity's (power outages: `alarm`). |
 | `sb_notify.resolve` | `key`, `message` | Card becomes "Resolved: …" and clears itself after 15 min. |
 | `sb_notify.dismiss` | `key` | Card leaves the phone, reminders stop; back once after 24 h if still open (option; 0 = never), at once if severity goes up. |
 | `sb_notify.notify` | `key`, `title`, `message`, `url`, `ttl` (default 4 h, 0 = until cleared), `loud` | Show or replace a notice. |

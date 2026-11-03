@@ -62,6 +62,14 @@
         "ttl": {
           "name": "TTL",
           "description": "Resolve automatically if not raised again within this time."
+        },
+        "channel": {
+          "name": "Phone channel",
+          "description": "Use this Android notification channel instead of the severity's own, e.g. alarm for power outages."
+        },
+        "escalate": {
+          "name": "Escalate",
+          "description": "This update is worse even at the same severity (an outage spreading): ring again and bring the card back if it was dismissed."
         }
       }
     },

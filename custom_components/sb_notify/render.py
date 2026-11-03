@@ -34,7 +34,9 @@ def alert(a: dict, *, loud: bool, since: Callable[[float], str]) -> dict:
     data = {
         "tag": alert_tag(a["key"]),
         "group": GROUP_ALERTS,
-        "channel": CH_CRITICAL if critical else CH_WARNING,
+        # A caller's own channel (power outages ring on the phone's "alarm" channel) wins; the
+        # phone already knows that channel, so its sound and DND settings are the phone's.
+        "channel": a.get("channel") or (CH_CRITICAL if critical else CH_WARNING),
         "importance": "high" if critical else "low",
         "alert_once": not loud,
         "sticky": True,
