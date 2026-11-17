@@ -5,10 +5,10 @@
 | Repo | github.com/snadboy/sb-notify (public since 2026-11-17; created 2026-11-02) — local `~/projects/git/sb-notify`, branch `main` |
 | Domain | `sb_notify` (MIT), single config entry |
 | Design | Claude Doc "Homelab Incidents & Notifications — Design": https://claude.ai/artifact/X25rMcRs4gBMGPqpBrw6jT |
-| Tests | `python3 tests/test_register.py` (offline, 24 checks: register rules + card payloads) |
+| Tests | `python3 tests/test_register.py` (offline, 26 checks: register rules + card payloads) |
 | Validate | `docker run --rm -v "$PWD/custom_components":/github/workspace/custom_components:ro ghcr.io/home-assistant/hassfest:latest` |
 | Quick test deploy | `tar czf - --exclude=__pycache__ -C custom_components sb_notify \| ssh snadboy@homeassistant "cd /config/custom_components && sudo tar xzf -"` then a FULL HA restart |
-| Release (Marketplace) | bump `manifest.json` version → commit, push → `gh release create vX.Y.Z` → `update.install` on its update entity → confirm files → full restart (never batched with the install). Marketplace needs the repo public, or GitHub connected for a private one. |
+| Release (Marketplace) | Installed through Marketplace since 2026-11-17 (custom repo, v0.3.0); update entity **`update.sb_notify`** (no `_update` suffix, unlike the other SB repos). Bump `manifest.json` version AND `VERSION` in `frontend/sb-notify.js` (the `?v=` cache-buster) → commit, push → `gh release create vX.Y.Z` → `update.install` on `update.sb_notify` → confirm files → full restart, asked for first (never batched with the install). Use this, not the quick deploy, so Marketplace's record matches the files. |
 
 ## Why it exists (2026-11-02)
 
