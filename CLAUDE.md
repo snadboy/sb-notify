@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Repo | github.com/snadboy/sb-notify (private — making it public was blocked by the permission classifier; the user can flip it) — created 2026-11-02 — local `~/projects/git/sb-notify`, branch `main` |
+| Repo | github.com/snadboy/sb-notify (public since 2026-11-17; created 2026-11-02) — local `~/projects/git/sb-notify`, branch `main` |
 | Domain | `sb_notify` (MIT), single config entry |
 | Design | Claude Doc "Homelab Incidents & Notifications — Design": https://claude.ai/artifact/X25rMcRs4gBMGPqpBrw6jT |
 | Tests | `python3 tests/test_register.py` (offline, 24 checks: register rules + card payloads) |
