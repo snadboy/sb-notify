@@ -53,6 +53,20 @@ Test keys `test:critical` / `test:warning` may still be in the register — reso
 Other Claude sessions restart HA too (SB Modes released + restarted at 21:55 and 22:10 the same
 evening): check the Supervisor log for a recent restart before doing another.
 
+## 2026-11-17 check (two weeks live)
+
+Working: 7 Matter-misbehaving episodes and 2 mass outages opened and resolved themselves, SDR
+resolved via its TTL, short Kuma outages resolved, ~30 laundry/Metra notices came and went,
+no sb_notify errors in the HA log.
+
+Fixed: the Kuma storm only resolved at **zero** monitors down, so one chronically-down monitor
+(ts-svc: unifi-toolkit, down since 11-03) kept `kuma:storm` open as "1 still down" from 11-15,
+re-ringing every 4 h as a critical alert (before SB Notify the card was silent with alert_once).
+Now the storm ends at **fewer than 5** down and each monitor still down gets its own warning
+(repeat over `watched`); unifi-toolkit was removed from the Kuma automation's three lists (re-add
+once fixed). Closed by hand: `kuma:storm`, `kuma-ts_svc_unifi_toolkit`, `test:critical`, and
+`input_boolean.kuma_storm_active` turned off.
+
 ## Verified 2026-11-02 (throwaway HA 2026.11.0b2 container on sdevs, capture script as the phone)
 
 hassfest clean · config flow + options + single-instance abort · raise critical (card +
